@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CRAH AI Cooling Optimizer — Live Dashboard</title>
+  <meta name="description" content="AI-based data center cooling optimization dashboard for CRAH unit control, hotspot detection, and energy efficiency." />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ── Design tokens ──────────────────────────────────────────────────── */
+    :root {
+      --bg-deep:       #050810;
+      --bg-card:       #0c1122;
+      --bg-card-2:     #101828;
+      --bg-glass:      rgba(16, 24, 40, 0.75);
+      --border:        rgba(99, 102, 241, 0.18);
+      --border-glow:   rgba(99, 102, 241, 0.45);
+      --accent-blue:   #6366f1;
+      --accent-cyan:   #22d3ee;
+      --accent-green:  #22c55e;
+      --accent-amber:  #f59e0b;
+      --accent-orange: #f97316;
+      --accent-red:    #ef4444;
+      --text-primary:  #f1f5f9;
+      --text-secondary:#94a3b8;
+      --text-dim:      #475569;
+      --grad-header:   linear-gradient(135deg, #1e1b4b 0%, #0c1122 60%, #030712 100%);
+      --grad-card:     linear-gradient(145deg, #0f172a, #0c1122);
+      --shadow-glow:   0 0 40px rgba(99, 102, 241, 0.12);
+      --radius-card:   16px;
+      --radius-sm:     8px;
+    }
+
+    /* ── Reset & base ────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated grid background ───────────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: -1;
+      background-image:
+        linear-gradient(rgba(99,102,241,0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99,102,241,0.035) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    header {
+      background: var(--grad-header);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-icon {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 20px rgba(99,102,241,0.4);
+    }
+
+    h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    h1 span { color: var(--accent-cyan); }
+
+    .header-subtitle {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      margin-top: 1px;
+      font-weight: 400;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    #status-pill {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--accent-green);
+      background: rgba(34,197,94,0.1);
+      border: 1px solid rgba(34,197,94,0.25);
+      padding: 5px 12px;
+      border-radius: 20px;
+    }
+
+    .pulse-dot {
+      width: 7px; height: 7px;
+      background: var(--accent-green);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(0.7); }
+    }
+
+    #step-counter {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+    }
+
+    .btn-reset {
+      background: rgba(99,102,241,0.15);
+      border: 1px solid var(--border);
+      color: var(--accent-blue);
+      padding: 6px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-reset:hover {
+      background: rgba(99,102,241,0.3);
+      border-color: var(--border-glow);
+    }
+
+    /* ── Main layout ─────────────────────────────────────────────────────── */
+    main {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 28px 24px;
+      display: grid;
+      gap: 24px;
+    }
+
+    /* ── KPI row ─────────────────────────────────────────────────────────── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 20px 22px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, transform 0.2s;
+    }
+    .kpi-card:hover {
+      border-color: var(--border-glow);
+      transform: translateY(-2px);
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: var(--accent-blue);
+      opacity: 0.6;
+    }
+
+    .kpi-label {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+
+    .kpi-value {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-top: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      line-height: 1;
+    }
+
+    .kpi-sub {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      margin-top: 6px;
+    }
+
+    .kpi-icon {
+      position: absolute;
+      right: 16px; top: 16px;
+      font-size: 1.5rem;
+      opacity: 0.2;
+    }
+
+    /* Colour variants */
+    .kpi-blue  { --c: var(--accent-blue); }
+    .kpi-cyan  { --c: var(--accent-cyan); }
+    .kpi-green { --c: var(--accent-green); }
+    .kpi-amber { --c: var(--accent-amber); }
+    .kpi-red   { --c: var(--accent-red); }
+    .kpi-card  { }
+    .kpi-card::before { background: var(--c, var(--accent-blue)); }
+    .kpi-value { color: var(--c, var(--text-primary)); }
+
+    /* ── Two-column content area ─────────────────────────────────────────── */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 1100px) {
+      .content-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Cards ───────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 22px;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .card-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-secondary);
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title .badge {
+      background: rgba(99,102,241,0.15);
+      color: var(--accent-blue);
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.68rem;
+      font-weight: 700;
+    }
+
+    /* ── Rack heatmap ────────────────────────────────────────────────────── */
+    .heatmap-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    .rack-cell {
+      aspect-ratio: 1;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.78rem;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      border: 1px solid rgba(255,255,255,0.06);
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .rack-cell:hover {
+      transform: scale(1.07);
+      box-shadow: 0 0 16px rgba(0,0,0,0.5);
+      z-index: 5;
+    }
+
+    .rack-cell .rack-id {
+      font-size: 0.6rem;
+      opacity: 0.7;
+      font-weight: 400;
+    }
+
+    .rack-cell .rack-temp {
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    /* Heatmap colour scale via inline style */
+
+    /* ── CRAH unit cards ─────────────────────────────────────────────────── */
+    .crah-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .crah-unit {
+      background: var(--bg-card-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      transition: border-color 0.3s;
+    }
+
+    .crah-unit:hover { border-color: var(--border-glow); }
+
+    .crah-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .crah-name {
+      font-weight: 700;
+      font-size: 0.88rem;
+    }
+
+    .crah-mode {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+    .mode-NORMAL  { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .mode-BOOST   { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .mode-ECONOMY { background: rgba(56,189,248,0.15); color: #38bdf8; }
+    .mode-STANDBY { background: rgba(100,116,139,0.15); color: #64748b; }
+
+    .crah-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .crah-metric {
+      font-size: 0.7rem;
+    }
+
+    .crah-metric-label {
+      color: var(--text-dim);
+      font-size: 0.65rem;
+      margin-bottom: 2px;
+    }
+
+    .crah-metric-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      color: var(--accent-cyan);
+    }
+
+    /* Fan speed gauge */
+    .fan-gauge-wrap {
+      grid-column: 1 / -1;
+      margin-top: 4px;
+    }
+
+    .fan-gauge-label {
+      display: flex; justify-content: space-between;
+      font-size: 0.65rem; color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .gauge-bar {
+      height: 6px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .gauge-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.8s ease;
+      background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
+    }
+
+    /* ── Temperature trend chart ─────────────────────────────────────────── */
+    .chart-wrap {
+      position: relative;
+      height: 220px;
+    }
+
+    /* ── Alerts panel ────────────────────────────────────────────────────── */
+    .alerts-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 320px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .alert-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.78rem;
+      background: var(--bg-card-2);
+      border: 1px solid var(--border);
+      transition: transform 0.15s;
+    }
+    .alert-item:hover { transform: translateX(3px); }
+
+    .sev-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .sev-text {
+      font-weight: 700;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      width: 68px;
+      flex-shrink: 0;
+    }
+
+    .alert-msg { color: var(--text-secondary); flex: 1; }
+
+    .alert-temp {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 0.82rem;
+    }
+
+    /* ── AI recommendation panel ─────────────────────────────────────────── */
+    .ai-box {
+      background: linear-gradient(135deg, #0f172a, #1e1b4b22);
+      border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 12px;
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ai-box::before {
+      content: '';
+      position: absolute;
+      top: -40px; right: -40px;
+      width: 120px; height: 120px;
+      background: radial-gradient(circle, rgba(99,102,241,0.15), transparent 70%);
+      pointer-events: none;
+    }
+
+    .ai-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--accent-blue);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 10px;
+    }
+
+    .ai-orb {
+      width: 8px; height: 8px;
+      background: var(--accent-blue);
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+
+    #ai-text {
+      font-size: 0.82rem;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+    }
+
+    /* ── Actions log ─────────────────────────────────────────────────────── */
+    .actions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+
+    .action-item {
+      background: var(--bg-card-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 0.75rem;
+    }
+
+    .action-header {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 5px;
+    }
+
+    .action-crah { font-weight: 700; color: var(--accent-cyan); }
+    .action-sev  { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; }
+
+    .action-changes { color: var(--text-dim); }
+    .action-changes li { list-style: none; padding-left: 0; }
+    .action-changes li::before { content: "→ "; color: var(--accent-blue); }
+
+    /* ── Model metrics bar ───────────────────────────────────────────────── */
+    .model-bar {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .m-metric {
+      background: var(--bg-card-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 18px;
+      min-width: 130px;
+    }
+
+    .m-label { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; }
+    .m-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent-green);
+      margin-top: 3px;
+    }
+
+    /* ── Scrollbar ───────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Fade-in animation ───────────────────────────────────────────────── */
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .card, .kpi-card {
+      animation: fadeSlideIn 0.4s ease both;
+    }
+
+    /* ── Loading overlay ─────────────────────────────────────────────────── */
+    #loading-overlay {
+      position: fixed; inset: 0; z-index: 999;
+      background: var(--bg-deep);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      transition: opacity 0.5s;
+    }
+
+    .loading-icon {
+      font-size: 3rem;
+      animation: spin 2s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      font-size: 1rem;
+      color: var(--text-secondary);
+    }
+
+    .loading-bar {
+      width: 200px;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .loading-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
+      border-radius: 2px;
+      animation: loadFill 3s ease forwards;
+    }
+    @keyframes loadFill { to { width: 100%; } }
+
+    /* ---- Control Mode/Phase bar ----------------------------------------- */
+    .control-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 14px 22px;
+    }
+    .ctrl-group { display: flex; align-items: center; gap: 10px; }
+    .ctrl-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; font-weight: 600; }
+    .mode-btn {
+      padding: 5px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+      border: 1px solid var(--border); cursor: pointer; transition: all 0.2s;
+      background: transparent; color: var(--text-secondary);
+    }
+    .mode-btn:hover { border-color: var(--border-glow); color: var(--text-primary); }
+    .mode-btn.active { background: rgba(99,102,241,0.2); border-color: var(--accent-blue); color: var(--accent-blue); }
+    .mode-btn.mode-LOCAL_AUTO.active { background: rgba(239,68,68,0.15); border-color: var(--accent-red); color: var(--accent-red); }
+    .mode-btn.mode-SUPERVISED.active { background: rgba(245,158,11,0.15); border-color: var(--accent-amber); color: var(--accent-amber); }
+    .phase-select {
+      background: var(--bg-card-2); border: 1px solid var(--border);
+      color: var(--text-primary); padding: 5px 10px; border-radius: var(--radius-sm);
+      font-size: 0.75rem; font-family: 'Inter', sans-serif; cursor: pointer;
+    }
+    #phase-label {
+      font-size: 0.72rem; color: var(--accent-cyan);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ---- Aisle grid ------------------------------------------------------ */
+    .aisle-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+    .aisle-card {
+      background: var(--bg-card-2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px;
+      transition: border-color 0.3s, transform 0.2s;
+    }
+    .aisle-card:hover { border-color: var(--border-glow); transform: translateY(-2px); }
+    .aisle-name { font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; }
+    .aisle-stat {
+      display: flex; justify-content: space-between;
+      font-size: 0.7rem; color: var(--text-dim); margin: 3px 0;
+    }
+    .aisle-stat span { color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+    .aisle-badge {
+      display: inline-block; font-size: 0.6rem; font-weight: 700;
+      padding: 2px 7px; border-radius: 8px; margin-top: 6px;
+    }
+    .compound-badge {
+      background: rgba(249,115,22,0.2); color: var(--accent-orange);
+      border: 1px solid rgba(249,115,22,0.4); font-size: 0.6rem;
+      padding: 2px 7px; border-radius: 8px; margin-left: 6px;
+    }
+
+    /* ---- BMS panel ------------------------------------------------------- */
+    .bms-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;
+    }
+    .bms-stat {
+      background: var(--bg-card-2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 14px;
+    }
+    .bms-stat-label { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; }
+    .bms-stat-value { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.9rem; margin-top: 3px; }
+    .bms-connected { color: var(--accent-green); }
+    .bms-simulation { color: var(--accent-amber); }
+
+    /* ---- Supervised queue ------------------------------------------------ */
+    .pending-list {
+      display: flex; flex-direction: column; gap: 10px;
+      max-height: 360px; overflow-y: auto;
+    }
+    .pending-item {
+      background: var(--bg-card-2); border: 1px solid rgba(245,158,11,0.3);
+      border-radius: 12px; padding: 14px 16px;
+    }
+    .pending-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .pending-aisle { font-weight: 700; color: var(--accent-amber); font-size: 0.85rem; }
+    .pending-age { font-size: 0.68rem; color: var(--text-dim); margin-left: auto; }
+    .pending-reason { font-size: 0.74rem; color: var(--text-secondary); margin-bottom: 10px; }
+    .pending-deltas {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;
+    }
+    .delta-box {
+      background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px 10px; font-size: 0.7rem;
+    }
+    .delta-label { color: var(--text-dim); }
+    .delta-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--accent-cyan); }
+    .pending-actions { display: flex; gap: 8px; }
+    .btn-approve {
+      flex: 1; padding: 7px; border-radius: 8px; font-weight: 700; font-size: 0.8rem;
+      cursor: pointer; border: none; transition: all 0.2s;
+      background: rgba(34,197,94,0.2); color: var(--accent-green); border: 1px solid rgba(34,197,94,0.4);
+    }
+    .btn-approve:hover { background: rgba(34,197,94,0.35); }
+    .btn-reject {
+      flex: 1; padding: 7px; border-radius: 8px; font-weight: 700; font-size: 0.8rem;
+      cursor: pointer; border: none; transition: all 0.2s;
+      background: rgba(239,68,68,0.15); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.3);
+    }
+    .btn-reject:hover { background: rgba(239,68,68,0.3); }
+    .sup-empty { color: var(--text-dim); font-size: 0.8rem; text-align: center; padding: 20px; }
+    .sup-stats {
+      display: flex; gap: 16px; font-size: 0.72rem;
+      margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .sup-stat span { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--accent-cyan); }
+  </style>
+</head>
+
+<body>
+
+<!-- Loading overlay -->
+<div id="loading-overlay">
+  <div class="loading-icon">⚙️</div>
+  <div class="loading-text">Initialising AI Cooling System…</div>
+  <div class="loading-bar"><div class="loading-fill"></div></div>
+</div>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<header>
+  <div class="header-left">
+    <div class="logo-icon">❄️</div>
+    <div>
+      <h1>CRAH <span>AI</span> Optimizer</h1>
+      <div class="header-subtitle">AI-Based Group CRAH Control &amp; Cooling Optimization</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div id="status-pill">
+      <div class="pulse-dot"></div>
+      LIVE
+    </div>
+    <div id="step-counter">Step —</div>
+    <button class="btn-reset" id="btn-reset">↺ Reset</button>
+  </div>
+</header>
+
+<!-- ── Main ────────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- KPI row -->
+  <div class="kpi-row">
+    <div class="kpi-card kpi-cyan">
+      <span class="kpi-icon">🌡️</span>
+      <div class="kpi-label">Avg Rack Temp</div>
+      <div class="kpi-value" id="kpi-avg-temp">—</div>
+      <div class="kpi-sub">°C — hot-aisle return</div>
+    </div>
+    <div class="kpi-card kpi-red">
+      <span class="kpi-icon">🔥</span>
+      <div class="kpi-label">Max Rack Temp</div>
+      <div class="kpi-value" id="kpi-max-temp">—</div>
+      <div class="kpi-sub">°C — peak hotspot</div>
+    </div>
+    <div class="kpi-card kpi-blue">
+      <span class="kpi-icon">💨</span>
+      <div class="kpi-label">Hotspots</div>
+      <div class="kpi-value" id="kpi-hotspots">—</div>
+      <div class="kpi-sub">racks above threshold</div>
+    </div>
+    <div class="kpi-card kpi-green">
+      <span class="kpi-icon">⚡</span>
+      <div class="kpi-label">PUE</div>
+      <div class="kpi-value" id="kpi-pue">—</div>
+      <div class="kpi-sub">Power Usage Effectiveness</div>
+    </div>
+    <div class="kpi-card kpi-amber">
+      <span class="kpi-icon">🖥️</span>
+      <div class="kpi-label">IT Load</div>
+      <div class="kpi-value" id="kpi-it-load">—</div>
+      <div class="kpi-sub">kW — total server load</div>
+    </div>
+    <div class="kpi-card kpi-blue">
+      <span class="kpi-icon">❄️</span>
+      <div class="kpi-label">Cooling Power</div>
+      <div class="kpi-value" id="kpi-cool-power">—</div>
+      <div class="kpi-sub">kW — CRAH fan overhead</div>
+    </div>
+  </div>
+
+  <!-- Content row 1: heatmap + CRAH units -->
+  <div class="content-grid">
+
+    <!-- Rack Heatmap -->
+    <div class="card">
+      <div class="card-title">
+        🗺️ Rack Temperature Heatmap
+        <span class="badge">4×4 Grid</span>
+      </div>
+      <div class="heatmap-grid" id="heatmap"></div>
+    </div>
+
+    <!-- CRAH Units -->
+    <div class="card">
+      <div class="card-title">🌀 CRAH Unit Status</div>
+      <div class="crah-grid" id="crah-grid"></div>
+    </div>
+
+  </div>
+
+  <!-- ── NEW: Control Mode / Phase Bar ───────────────────────────────── -->
+  <div class="control-bar">
+    <div class="ctrl-group">
+      <div class="ctrl-label">Control Mode</div>
+      <button class="mode-btn mode-AI active" id="btn-mode-ai" onclick="setMode('AI')">AI Autonomous</button>
+      <button class="mode-btn mode-SUPERVISED" id="btn-mode-sup" onclick="setMode('SUPERVISED')">Supervised</button>
+      <button class="mode-btn mode-LOCAL_AUTO" id="btn-mode-local" onclick="setMode('LOCAL_AUTO')">Local Auto</button>
+    </div>
+    <div class="ctrl-group" style="margin-left:auto">
+      <div class="ctrl-label">Phase</div>
+      <select class="phase-select" id="phase-select" onchange="setPhase(this.value)">
+        <option value="1">Phase 1 - Data Collection</option>
+        <option value="2">Phase 2 - Model Training</option>
+        <option value="3" selected>Phase 3 - Simulation Testing</option>
+        <option value="4">Phase 4 - Supervised Deployment</option>
+        <option value="5">Phase 5 - Full Autonomous</option>
+      </select>
+    </div>
+    <div id="phase-label">Phase 3 - Simulation Testing</div>
+  </div>
+
+  <!-- Content row 2: trend chart + alerts -->
+  <div class="content-grid">
+
+    <!-- Temperature Trend -->
+    <div class="card">
+      <div class="card-title">📈 Temperature Trend</div>
+      <div class="chart-wrap">
+        <canvas id="tempChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Active Alerts -->
+    <div class="card">
+      <div class="card-title">
+        ⚠️ Active Alerts
+        <span class="badge" id="alert-count">0</span>
+      </div>
+      <div class="alerts-list" id="alerts-list"></div>
+    </div>
+
+  </div>
+
+  <!-- Content row 3: AI panel + actions -->
+  <div class="content-grid">
+
+    <!-- Claude AI Recommendations -->
+    <div class="card">
+      <div class="card-title">🤖 Claude AI Recommendations</div>
+      <div class="ai-box">
+        <div class="ai-tag"><div class="ai-orb"></div> Claude Managed Agent</div>
+        <div id="ai-text">Analysing system telemetry…</div>
+      </div>
+    </div>
+
+    <!-- Optimizer Actions -->
+    <div class="card">
+      <div class="card-title">⚙️ Optimizer Actions</div>
+      <div class="actions-list" id="actions-list"></div>
+    </div>
+
+  </div>
+
+  <!-- ML Model metrics -->
+  <div class="card">
+    <div class="card-title">🧠 ML Model Performance <span class="badge">T_rack = f(F_CRAH, T_d, L_IT, A_airflow)</span></div>
+    <div class="model-bar" id="model-bar">
+      <div class="m-metric"><div class="m-label">Status</div><div class="m-val" style="color:var(--accent-green)">TRAINED</div></div>
+    </div>
+  </div>
+
+  <!-- ── NEW: Aisle Temperature Overview ──────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">🏢 Aisle Temperature Overview <span class="badge">Named Aisles</span></div>
+    <div class="aisle-grid" id="aisle-grid"></div>
+  </div>
+
+  <!-- ── NEW: Supervised Mode Queue ───────────────────────────────────── -->
+  <div class="card" id="supervised-panel">
+    <div class="card-title">👁️ Supervised Mode — Pending Approvals
+      <span class="badge" id="sup-pending-count">0</span>
+    </div>
+    <div class="sup-stats">
+      <div class="sup-stat">Proposed: <span id="sup-stat-proposed">0</span></div>
+      <div class="sup-stat">Approved: <span id="sup-stat-approved">0</span></div>
+      <div class="sup-stat">Rejected: <span id="sup-stat-rejected">0</span></div>
+      <div class="sup-stat">Expired:  <span id="sup-stat-expired">0</span></div>
+    </div>
+    <div class="pending-list" id="pending-list">
+      <div class="sup-empty">No pending actions. Switch to Supervised mode to see proposals here.</div>
+    </div>
+  </div>
+
+  <!-- ── NEW: Niagara BMS Status ──────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">🔌 Niagara Framework BMS Connector
+      <span class="badge" id="bms-mode-badge">SIMULATION</span>
+    </div>
+    <div class="bms-grid" id="bms-grid"></div>
+  </div>
+
+  <!-- PUE chart -->
+  <div class="card">
+    <div class="card-title">⚡ PUE &amp; Energy Efficiency History</div>
+    <div class="chart-wrap">
+      <canvas id="pueChart"></canvas>
+    </div>
+  </div>
+
+</main>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   Dashboard JavaScript
+══════════════════════════════════════════════════════════ */
+const POLL_MS = {{ poll_interval_ms }};
+
+/* ── Chart setup ─────────────────────────────────────── */
+const chartDefaults = {
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: { duration: 400 },
+  plugins: {
+    legend: {
+      labels: { color: '#94a3b8', font: { family: 'Inter', size: 11 } }
+    }
+  },
+  scales: {
+    x: {
+      ticks: { color: '#475569', font: { size: 10 } },
+      grid:  { color: 'rgba(99,102,241,0.07)' }
+    },
+    y: {
+      ticks: { color: '#475569', font: { size: 10 } },
+      grid:  { color: 'rgba(99,102,241,0.07)' }
+    }
+  }
+};
+
+/* Temperature trend chart */
+const tempCtx   = document.getElementById('tempChart').getContext('2d');
+const tempChart = new Chart(tempCtx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      {
+        label: 'Avg Temp (°C)',
+        data: [],
+        borderColor: '#22d3ee',
+        backgroundColor: 'rgba(34,211,238,0.08)',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 0,
+        borderWidth: 2,
+      },
+      {
+        label: 'Max Temp (°C)',
+        data: [],
+        borderColor: '#ef4444',
+        backgroundColor: 'rgba(239,68,68,0.06)',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 0,
+        borderWidth: 1.5,
+        borderDash: [4, 3],
+      },
+      {
+        label: 'Min Temp (°C)',
+        data: [],
+        borderColor: '#22c55e',
+        backgroundColor: 'rgba(34,197,94,0.04)',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 0,
+        borderWidth: 1.5,
+        borderDash: [4, 3],
+      }
+    ]
+  },
+  options: { ...chartDefaults }
+});
+
+/* PUE chart */
+const pueCtx   = document.getElementById('pueChart').getContext('2d');
+const pueChart = new Chart(pueCtx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      {
+        label: 'PUE',
+        data: [],
+        borderColor: '#f59e0b',
+        backgroundColor: 'rgba(245,158,11,0.08)',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 0,
+        borderWidth: 2,
+      },
+      {
+        label: 'Hotspots',
+        data: [],
+        borderColor: '#f97316',
+        backgroundColor: 'rgba(249,115,22,0.08)',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 0,
+        borderWidth: 1.5,
+        yAxisID: 'y2',
+      }
+    ]
+  },
+  options: {
+    ...chartDefaults,
+    scales: {
+      ...chartDefaults.scales,
+      y2: {
+        position: 'right',
+        ticks: { color: '#f97316', font: { size: 10 } },
+        grid: { display: false }
+      }
+    }
+  }
+});
+
+/* ── Colour helpers ───────────────────────────────────── */
+function tempToColor(t) {
+  if (t < 22) return { bg: 'rgba(56,189,248,0.25)',  border: '#38bdf8', text: '#38bdf8' };
+  if (t < 27) return { bg: 'rgba(34,197,94,0.20)',   border: '#22c55e', text: '#22c55e' };
+  if (t < 28) return { bg: 'rgba(250,204,21,0.20)',  border: '#facc15', text: '#facc15' };
+  if (t < 32) return { bg: 'rgba(249,115,22,0.25)',  border: '#f97316', text: '#f97316' };
+  return             { bg: 'rgba(239,68,68,0.30)',   border: '#ef4444', text: '#ef4444' };
+}
+
+function sevColor(sev) {
+  return {
+    OVERCOOL: '#38bdf8',
+    NORMAL:   '#22c55e',
+    MEDIUM:   '#facc15',
+    HIGH:     '#f97316',
+    CRITICAL: '#ef4444',
+  }[sev] || '#94a3b8';
+}
+
+/* ── Render functions ─────────────────────────────────── */
+function renderHeatmap(racks) {
+  const grid = document.getElementById('heatmap');
+  grid.innerHTML = '';
+  const sorted = [...racks].sort((a, b) => a.rack_id - b.rack_id);
+  sorted.forEach(r => {
+    const c = tempToColor(r.rack_temp_c);
+    const cell = document.createElement('div');
+    cell.className = 'rack-cell';
+    cell.style.background = c.bg;
+    cell.style.borderColor = c.border + '55';
+    cell.style.boxShadow   = `inset 0 0 20px ${c.bg}`;
+    cell.title = `Rack ${r.rack_id} | CRAH-${r.crah_id} | IT: ${r.it_load_kw}kW`;
+    cell.innerHTML = `
+      <span class="rack-id">R${r.rack_id}</span>
+      <span class="rack-temp" style="color:${c.text}">${r.rack_temp_c.toFixed(1)}°</span>
+    `;
+    grid.appendChild(cell);
+  });
+}
+
+function renderCRAH(states) {
+  const grid = document.getElementById('crah-grid');
+  grid.innerHTML = '';
+  states.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'crah-unit';
+    card.innerHTML = `
+      <div class="crah-header">
+        <div class="crah-name">CRAH-${s.unit_id}</div>
+        <div class="crah-mode mode-${s.mode}">${s.mode}</div>
+      </div>
+      <div class="crah-metrics">
+        <div class="crah-metric">
+          <div class="crah-metric-label">Airflow</div>
+          <div class="crah-metric-value">${s.airflow_cfm.toFixed(0)} CFM</div>
+        </div>
+        <div class="crah-metric">
+          <div class="crah-metric-label">Discharge</div>
+          <div class="crah-metric-value">${s.discharge_temp_c.toFixed(1)}°C</div>
+        </div>
+        <div class="crah-metric">
+          <div class="crah-metric-label">Setpoint</div>
+          <div class="crah-metric-value">${s.setpoint_c.toFixed(1)}°C</div>
+        </div>
+        <div class="crah-metric">
+          <div class="crah-metric-label">Energy</div>
+          <div class="crah-metric-value">${s.cumulative_kwh.toFixed(2)} kWh</div>
+        </div>
+        <div class="fan-gauge-wrap">
+          <div class="fan-gauge-label">
+            <span>Fan Speed</span>
+            <span>${s.fan_speed_pct.toFixed(1)}%</span>
+          </div>
+          <div class="gauge-bar">
+            <div class="gauge-fill" style="width:${s.fan_speed_pct}%"></div>
+          </div>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function renderAlerts(alerts) {
+  const list = document.getElementById('alerts-list');
+  list.innerHTML = '';
+  if (!alerts.length) {
+    list.innerHTML = '<div style="color:var(--text-dim);font-size:0.8rem;padding:12px;">✅ No active alerts — system nominal</div>';
+    return;
+  }
+  alerts.slice(0, 16).forEach(a => {
+    const c = sevColor(a.severity);
+    const item = document.createElement('div');
+    item.className = 'alert-item';
+    item.innerHTML = `
+      <div class="sev-dot" style="background:${c}; box-shadow:0 0 8px ${c}55"></div>
+      <span class="sev-text" style="color:${c}">${a.severity}</span>
+      <span class="alert-msg">${a.message}</span>
+      <span class="alert-temp" style="color:${c}">${a.temp_c.toFixed(1)}°C</span>
+    `;
+    list.appendChild(item);
+  });
+  document.getElementById('alert-count').textContent = alerts.length;
+}
+
+function renderActions(actions) {
+  const list = document.getElementById('actions-list');
+  list.innerHTML = '';
+  if (!actions.length) {
+    list.innerHTML = '<div style="color:var(--text-dim);font-size:0.8rem;padding:12px;">No optimizer actions this step.</div>';
+    return;
+  }
+  actions.forEach(a => {
+    const c = sevColor(a.severity);
+    const item = document.createElement('div');
+    item.className = 'action-item';
+    item.innerHTML = `
+      <div class="action-header">
+        <span class="action-crah">CRAH-${a.crah_id}</span>
+        <span class="action-sev" style="color:${c}">${a.severity}</span>
+        <span style="font-size:0.65rem;color:var(--text-dim);margin-left:auto">
+          avg ${a.avg_rack_temp?.toFixed(1)}°C | max ${a.max_rack_temp?.toFixed(1)}°C
+        </span>
+      </div>
+      <ul class="action-changes">
+        ${(a.changes || []).map(ch => `<li>${ch}</li>`).join('')}
+      </ul>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function renderModelMetrics(m) {
+  if (!m || !Object.keys(m).length) return;
+  const bar = document.getElementById('model-bar');
+  bar.innerHTML = '';
+  const items = [
+    ['RF MAE',   m.rf_mae_c   != null ? m.rf_mae_c.toFixed(3)  + '°C' : '—'],
+    ['GB MAE',   m.gb_mae_c   != null ? m.gb_mae_c.toFixed(3)  + '°C' : '—'],
+    ['Ens. MAE', m.ensemble_mae_c != null ? m.ensemble_mae_c.toFixed(3) + '°C' : '—'],
+    ['RF R²',    m.rf_r2      != null ? m.rf_r2.toFixed(4)             : '—'],
+    ['GB R²',    m.gb_r2      != null ? m.gb_r2.toFixed(4)             : '—'],
+    ['Train N',  m.n_train    != null ? m.n_train                       : '—'],
+    ['Test N',   m.n_test     != null ? m.n_test                        : '—'],
+  ];
+  if (m.feature_importances) {
+    Object.entries(m.feature_importances).forEach(([k, v]) => {
+      items.push([`FI: ${k}`, v.toFixed(4)]);
+    });
+  }
+  items.forEach(([label, val]) => {
+    bar.innerHTML += `
+      <div class="m-metric">
+        <div class="m-label">${label}</div>
+        <div class="m-val">${val}</div>
+      </div>`;
+  });
+}
+
+function updateCharts(history) {
+  const MAX = 60;
+  const labels = (history.steps || []).slice(-MAX).map(s => `#${s}`);
+
+  tempChart.data.labels = labels;
+  tempChart.data.datasets[0].data = (history.avg_rack_temp || []).slice(-MAX);
+  tempChart.data.datasets[1].data = (history.max_rack_temp || []).slice(-MAX);
+  tempChart.data.datasets[2].data = (history.min_rack_temp || []).slice(-MAX);
+  tempChart.update('none');
+
+  pueChart.data.labels = labels;
+  pueChart.data.datasets[0].data = (history.pue || []).slice(-MAX);
+  pueChart.data.datasets[1].data = (history.n_hotspots || []).slice(-MAX);
+  pueChart.update('none');
+}
+
+/* ── Main poll loop ───────────────────────────────────── */
+let firstLoad = true;
+
+async function fetchStatus() {
+  try {
+    const [statusRes, histRes] = await Promise.all([
+      fetch('/api/status'),
+      fetch('/api/metrics/history'),
+    ]);
+    const status  = await statusRes.json();
+    const history = await histRes.json();
+
+    if (firstLoad) {
+      document.getElementById('loading-overlay').style.opacity = '0';
+      setTimeout(() => {
+        document.getElementById('loading-overlay').style.display = 'none';
+      }, 600);
+      firstLoad = false;
+    }
+
+    const m = status.metrics || {};
+
+    // KPIs
+    document.getElementById('kpi-avg-temp').textContent  = (m.avg_rack_temp ?? '—').toFixed ? m.avg_rack_temp.toFixed(1) : '—';
+    document.getElementById('kpi-max-temp').textContent  = (m.max_rack_temp ?? '—').toFixed ? m.max_rack_temp.toFixed(1) : '—';
+    document.getElementById('kpi-hotspots').textContent  = m.n_hotspots ?? '—';
+    document.getElementById('kpi-pue').textContent       = (m.pue ?? '—').toFixed ? m.pue.toFixed(3) : '—';
+    document.getElementById('kpi-it-load').textContent   = (m.it_load_kw_total ?? '—').toFixed ? m.it_load_kw_total.toFixed(1) : '—';
+    document.getElementById('kpi-cool-power').textContent= (m.cooling_power_kw ?? '—').toFixed ? m.cooling_power_kw.toFixed(2) : '—';
+    document.getElementById('step-counter').textContent  = `Step ${status.step ?? '—'}`;
+
+    // Components
+    if (status.racks?.length)   renderHeatmap(status.racks);
+    if (status.crah?.length)    renderCRAH(status.crah);
+    if (status.alerts)          renderAlerts(status.alerts);
+    if (status.actions)         renderActions(status.actions);
+    if (status.model_metrics)   renderModelMetrics(status.model_metrics);
+    if (status.ai_recommendation) {
+      document.getElementById('ai-text').textContent = status.ai_recommendation;
+    }
+
+    updateCharts(history);
+
+  } catch (err) {
+    console.warn('Poll error:', err);
+  }
+}
+
+/* ── Reset button ─────────────────────────────────────── */
+document.getElementById('btn-reset').addEventListener('click', async () => {
+  if (!confirm('Reset simulation?')) return;
+  await fetch('/api/reset', { method: 'POST' });
+  firstLoad = true;
+  document.getElementById('loading-overlay').style.opacity = '1';
+  document.getElementById('loading-overlay').style.display = 'flex';
+});
+
+/* ── Start ────────────────────────────────────────────── */
+fetchStatus();
+setInterval(fetchStatus, POLL_MS);
+</script>
+<script src="/static/v2_extras.js"></script>
+</body>
+</html>
