@@ -7,9 +7,18 @@ ENV/
 env.bak/
 venv.bak/
 
-# Environment configurations
+# Environment configurations and secrets
 .anthropic_api_key
-
+*.env
+.env.*
+secrets.*
+*.key
+*.pem
+*.cert
+credentials.json
+key.json
+config.local.py
+config.secret.py
 # Python
 __pycache__/
 *.py[cod]
